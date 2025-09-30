@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import List
 from sklearn.metrics import precision_recall_fscore_support, classification_report
+from tqdm import tqdm
 
 from models import (
     ThreeSigmaModel,
@@ -52,12 +53,14 @@ def build_model(name: str, args: argparse.Namespace) -> BaseAnomalyModel:
     raise ValueError(f'unknown model name: {name}')
 
 
-def infer_points(win_df: pd.DataFrame, raw_per_kpi: dict, model: BaseAnomalyModel, max_windows: int | None = None):
+def infer_points(win_df: pd.DataFrame, raw_per_kpi: dict, model: BaseAnomalyModel, max_windows: int | None = None, show_progress: bool = True):
     y_true_points: List[int] = []
     y_pred_points: List[int] = []
 
-    total = len(win_df)
-    for idx, row in win_df.iterrows():
+    it = win_df.iterrows()
+    if show_progress:
+        it = tqdm(it, total=len(win_df), desc='Running windows')
+    for idx, row in it:
         if max_windows is not None and idx >= max_windows:
             break
         kpi = row['kpi_id']
@@ -85,6 +88,7 @@ def main():
     parser.add_argument('--win', default=DEFAULT_WIN, help='path to processed_ground_truth.csv')
     parser.add_argument('--model', default='ensemble', choices=['3sigma','sigma','kde','ocsvm','ensemble'])
     parser.add_argument('--max_windows', type=int, default=None)
+    parser.add_argument('--no_progress', action='store_true', help='disable progress bar')
     # 3sigma
     parser.add_argument('--k', type=float, default=3.0, help='k for 3-sigma')
     # KDE
@@ -110,7 +114,7 @@ def main():
     print('kpis:', len(raw_per_kpi))
 
     model = build_model(args.model, args)
-    y_true, y_pred = infer_points(win_df, raw_per_kpi, model, max_windows=args.max_windows)
+    y_true, y_pred = infer_points(win_df, raw_per_kpi, model, max_windows=args.max_windows, show_progress=(not args.no_progress))
 
     print('points collected:', len(y_true))
     if len(y_true) == 0:
